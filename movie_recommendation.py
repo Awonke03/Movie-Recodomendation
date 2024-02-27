@@ -1,9 +1,16 @@
 
-from google.colab import drive
-drive.mount('/content/drive')
-
 import pandas as pd
 import numpy as np
+import dash
+from dash import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output, State
+import plotly.express as px
+from sklearn.model_selection import train_test_split
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
+
 url = 'https://github.com/Awonke03/Movie-Recodomendation/blob/main/movielens_100k.csv'
 
 # Read the CSV file into a pandas DataFrame
@@ -20,20 +27,7 @@ len(dt.title.unique())
 
 y=dt["title"]
 X=dt.drop(columns="title")
-
-from sklearn.model_selection import train_test_split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-import dash
-from dash import dash_core_components as dcc
-import dash_html_components as html
-from dash.dependencies import Input, Output, State
-import plotly.express as px
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import linear_kernel
-
-
 
 # Preprocess data for recommendation engine
 dt['year'] = dt['year'].fillna('')
