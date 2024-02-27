@@ -4,7 +4,7 @@ drive.mount('/content/drive')
 
 import pandas as pd
 import numpy as np
-url = 'https://raw.githubusercontent.com/your-username/your-repo-name/main/movielens_100k.csv'
+url = 'https://github.com/Awonke03/Movie-Recodomendation/blob/main/movielens_100k.csv'
 
 # Read the CSV file into a pandas DataFrame
 dt = pd.read_csv(url)
