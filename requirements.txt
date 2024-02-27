@@ -1,0 +1,13 @@
+dash==2.15.0
+pandas
+plotly.express
+dash_bootstrap_components
+seaborn
+jupyter_dash
+gunicorn
+dash-core-components
+dash-html-components
+dash-renderer
+xlrd
+openpyxl
+Flask
