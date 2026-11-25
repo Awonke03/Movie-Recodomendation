@@ -33,7 +33,7 @@ try:
   live.locator('#close-detail').click();expect(live.locator('#detail-trailer iframe')).to_have_count(0)
   live.locator('#collection').select_option('classics');expect(live.locator('#section-title')).to_have_text('Classic cinema')
   live.close()
-  expect(page.locator('footer')).to_contain_text('© Awonke');assert page.locator('#credits, #credits-dialog').count()==0;expect(page.locator('.provider-attribution')).to_contain_text('not endorsed or certified by TMDB')
+  expect(page.locator('footer')).to_contain_text('© Awonke');expect(page.locator('#credits-dialog')).to_be_hidden();page.locator('#credits').click();expect(page.locator('#credits-dialog')).to_be_visible();expect(page.locator('.provider-attribution')).to_contain_text('not endorsed or certified by TMDB');page.locator('#close-credits').click();expect(page.locator('#credits-dialog')).to_be_hidden()
   assert not errors,errors
   b.close()
 finally:p.terminate();p.wait(timeout=10)
