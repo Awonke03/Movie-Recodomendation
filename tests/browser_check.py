@@ -25,8 +25,9 @@ try:
   live.route(re.compile(r'/api/discover\?'),lambda route:route.fulfill(json={'items':[movie],'total':1,'pages':1,'genres':['Action'],'decades':[2020,2010]}))
   live.route('**/api/tmdb/123456',lambda route:route.fulfill(json={**movie,'trailer':'ABCDEFGHIJK','related':[]}))
   live.route('https://www.youtube-nocookie.com/**',lambda route:route.fulfill(body='mock player'))
-  live.route('https://image.tmdb.org/**',lambda route:route.abort())
-  live.goto('http://127.0.0.1:8050');expect(live.locator('#section-title')).to_have_text('Recent releases');live.locator('#cards .poster').first.click();expect(live.locator('.trailer-play')).to_be_visible()
+  # Serve a valid image to catch hidden lazy-loading regressions.
+  live.route('https://image.tmdb.org/**',lambda route:route.fulfill(content_type='image/svg+xml',body='<svg xmlns="http://www.w3.org/2000/svg" width="500" height="750"><rect width="500" height="750" fill="red"/></svg>'))
+  live.goto('http://127.0.0.1:8050');expect(live.locator('#section-title')).to_have_text('Recent releases');expect(live.locator('#cards .poster img.image-ready')).to_have_count(1);expect(live.locator('#cards .poster .fallback')).to_be_hidden();assert live.locator('#cards .poster img').evaluate('(img)=>img.complete && img.naturalWidth>0');assert live.locator('#cards').evaluate('(el)=>getComputedStyle(el).gridTemplateColumns.split(" ").length')==4;live.locator('#cards .poster').first.click();expect(live.locator('.trailer-play')).to_be_visible()
   panel=live.locator('.trailer-panel').bounding_box();info=live.locator('.detail-info').bounding_box();assert panel['x']>info['x']
   live.locator('.trailer-play').click();expect(live.locator('#detail-trailer iframe')).to_have_attribute('src','https://www.youtube-nocookie.com/embed/ABCDEFGHIJK?autoplay=1&rel=0')
   live.locator('#close-detail').click();expect(live.locator('#detail-trailer iframe')).to_have_count(0)
