@@ -80,7 +80,7 @@ def tmdb(path,**params):
 TMDB_GENRES={'Action':28,'Adventure':12,'Animation':16,'Comedy':35,'Crime':80,'Documentary':99,'Drama':18,'Family':10751,'Fantasy':14,'History':36,'Horror':27,'Music':10402,'Mystery':9648,'Romance':10749,'Sci-Fi':878,'TV Movie':10770,'Thriller':53,'War':10752,'Western':37}
 TMDB_GENRE_NAMES={v:k for k,v in TMDB_GENRES.items()}
 def tmdb_public(m):
-    title=m.get('title','');date=m.get('release_date','');pid=m.get('id')
+    title=m.get('title','');date=m.get('release_date') or '';pid=m.get('id')
     if not isinstance(pid,int) or not title or m.get('adult',False):return None
     path=m.get('poster_path');back=m.get('backdrop_path')
     safe=lambda p:bool(isinstance(p,str) and re.fullmatch(r'/[A-Za-z0-9_.-]+',p))

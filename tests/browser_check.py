@@ -1,4 +1,4 @@
-import subprocess,sys,time,urllib.request
+import subprocess,sys,time,urllib.request,re
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
 root=Path(__file__).resolve().parents[1]
@@ -21,8 +21,8 @@ try:
    page.locator('[data-view="discover"]').click();page.locator('#cards .taste-actions button').first.click();page.locator('#for-you-nav').click();expect(page.locator('#section-title')).to_have_text('For You');expect(page.locator('#cards .movie')).to_have_count(24);expect(page.locator('#profile-count')).to_contain_text('1 liked')
   # Mock provider data, not a live trailer playback test.
   live=b.new_page(viewport={'width':1440,'height':900});movie={'provider':'TMDB','tmdb_id':123456,'title':'Example movie','year':2026,'genres':['Action'],'poster':'https://image.tmdb.org/t/p/w500/example.jpg','backdrop':'https://image.tmdb.org/t/p/w1280/example.jpg'}
-  live.route('**/api/health',lambda route:route.fulfill(json={'tmdb':True,'personalisation':False}))
-  live.route('**/api/discover?*',lambda route:route.fulfill(json={'items':[movie],'total':1,'pages':1,'genres':['Action'],'decades':[2020,2010]}))
+  live.route('**/health',lambda route:route.fulfill(json={'tmdb':True,'personalisation':False}))
+  live.route(re.compile(r'/api/discover\?'),lambda route:route.fulfill(json={'items':[movie],'total':1,'pages':1,'genres':['Action'],'decades':[2020,2010]}))
   live.route('**/api/tmdb/123456',lambda route:route.fulfill(json={**movie,'trailer':'ABCDEFGHIJK','related':[]}))
   live.route('https://www.youtube-nocookie.com/**',lambda route:route.fulfill(body='mock player'))
   live.route('https://image.tmdb.org/**',lambda route:route.abort())
