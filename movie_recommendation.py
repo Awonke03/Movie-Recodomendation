@@ -2,6 +2,7 @@
 import csv,os,re,math,unicodedata
 from pathlib import Path
 from collections import Counter
+from datetime import date,timedelta
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlencode,quote,urlparse
@@ -76,13 +77,15 @@ def tmdb(path,**params):
         res=requests.get('https://api.themoviedb.org/3/'+path,params=params,headers={'Authorization':'Bearer '+TOKEN} if TOKEN else {},timeout=6)
         res.raise_for_status();return res.json()
     except (requests.RequestException,ValueError):return {}
+TMDB_GENRES={'Action':28,'Adventure':12,'Animation':16,'Comedy':35,'Crime':80,'Documentary':99,'Drama':18,'Family':10751,'Fantasy':14,'History':36,'Horror':27,'Music':10402,'Mystery':9648,'Romance':10749,'Sci-Fi':878,'TV Movie':10770,'Thriller':53,'War':10752,'Western':37}
+TMDB_GENRE_NAMES={v:k for k,v in TMDB_GENRES.items()}
 def tmdb_public(m):
     title=m.get('title','');date=m.get('release_date','');pid=m.get('id')
-    if not isinstance(pid,int) or not title:return None
+    if not isinstance(pid,int) or not title or m.get('adult',False):return None
     path=m.get('poster_path');back=m.get('backdrop_path')
     safe=lambda p:bool(isinstance(p,str) and re.fullmatch(r'/[A-Za-z0-9_.-]+',p))
     local=TMDB_TO_LOCAL.get(pid)
-    return {**({'id':local['id'],'genres':local['genres'],'imdb_id':local.get('imdb_id')} if local else {}),'provider':'TMDB','tmdb_id':pid,'title':title,'year':int(date[:4]) if date[:4].isdigit() else None,'poster':'https://image.tmdb.org/t/p/w500'+path if safe(path) else None,'backdrop':'https://image.tmdb.org/t/p/w1280'+back if safe(back) else None,'overview':m.get('overview') or '', 'rating':round(m.get('vote_average') or 0,1) if m.get('vote_count',0)>0 else None,'rating_count':m.get('vote_count',0),'url':'https://www.themoviedb.org/movie/'+str(pid)}
+    return {**({'id':local['id'],'genres':local['genres'],'imdb_id':local.get('imdb_id')} if local else {}),'provider':'TMDB','tmdb_id':pid,'genres':local['genres'] if local else [TMDB_GENRE_NAMES[g] for g in m.get('genre_ids',[]) if g in TMDB_GENRE_NAMES],'title':title,'year':int(date[:4]) if date[:4].isdigit() else None,'poster':'https://image.tmdb.org/t/p/w500'+path if safe(path) else None,'backdrop':'https://image.tmdb.org/t/p/w1280'+back if safe(back) else None,'overview':m.get('overview') or '', 'rating':round(m.get('vote_average') or 0,1) if m.get('vote_count',0)>0 else None,'rating_count':m.get('vote_count',0),'url':'https://www.themoviedb.org/movie/'+str(pid)}
 def apple_movie(m):
     # Apple storefront metadata only; no downloading/caching of media files.
     try:
@@ -121,6 +124,30 @@ def trending():
     data=tmdb('trending/movie/week',language='en-US')
     items=[x for x in (tmdb_public(m) for m in data.get('results',[]) if not m.get('adult',False)) if x]
     return jsonify(items=items,available=bool(items))
+@app.get('/api/discover')
+def discover():
+    if not (TOKEN or API_KEY):return jsonify(error='Live catalogue unavailable'),503
+    category=request.args.get('category','all');genre=request.args.get('genre','');decade=request.args.get('decade','')
+    if category not in ('all','recent','upcoming','top','classics'):return jsonify(error='Unknown category'),400
+    if genre and genre not in TMDB_GENRES:return jsonify(error='Unknown genre'),400
+    if decade and (not re.fullmatch(r'\d{4}',decade) or int(decade)<1870 or int(decade)>date.today().year+10):return jsonify(error='Invalid decade'),400
+    page=max(1,min(500,request.args.get('page',1,type=int)));today=date.today()
+    start=date(1870,1,1);end=today
+    params={'include_adult':'false','include_video':'false','language':'en-US','page':page,'sort_by':'popularity.desc'}
+    if category=='recent':start=today-timedelta(days=365)
+    elif category=='upcoming':start=today+timedelta(days=1);end=today+timedelta(days=365)
+    elif category=='classics':end=date(1989,12,31)
+    elif category=='top':params.update(sort_by='vote_average.desc',vote_count_gte=500)
+    if decade:start=max(start,date(int(decade),1,1));end=min(end,date(int(decade)+9,12,31))
+    genres=sorted(TMDB_GENRES);decades=list(range((today.year+1)//10*10,1869,-10))
+    if start>end:return jsonify(items=[],total=0,page=page,pages=0,genres=genres,decades=decades)
+    params.update({'primary_release_date.gte':start.isoformat(),'primary_release_date.lte':end.isoformat()})
+    if 'vote_count_gte' in params:params['vote_count.gte']=params.pop('vote_count_gte')
+    if genre:params['with_genres']=TMDB_GENRES[genre]
+    d=tmdb('discover/movie',**params)
+    if 'results' not in d:return jsonify(error='Live catalogue unavailable'),503
+    items=[m for m in (tmdb_public(x) for x in d['results']) if m]
+    return jsonify(items=items,total=d.get('total_results',len(items)),page=page,pages=min(500,d.get('total_pages',1)),genres=genres,decades=decades)
 @app.get('/api/catalog')
 def catalog():
     genre=request.args.get('genre','');decade=request.args.get('decade','',type=str);q=request.args.get('q','')[:100]
@@ -132,12 +159,13 @@ def catalog():
     return jsonify(items=[compact(m) for m in pool[(page-1)*n:page*n]],total=len(pool),genres=GENRES,decades=sorted({m['year']//10*10 for m in MOVIES},reverse=True),page=page)
 @app.get('/api/search')
 def search_api():
-    q=request.args.get('q','')[:100];local=search(q)
-    remote=[]
+    q=request.args.get('q','')[:100];page=max(1,min(500,request.args.get('page',1,type=int)));local=search(q) if page==1 else []
+    remote=[];pages=1
     if len(q.strip())>=2 and (TOKEN or API_KEY):
-        remote=[x for x in (tmdb_public(m) for m in tmdb('search/movie',query=q,include_adult='false').get('results',[])) if x][:15]
+        d=tmdb('search/movie',query=q,include_adult='false',page=page);pages=min(500,d.get('total_pages',1))
+        remote=[x for x in (tmdb_public(m) for m in d.get('results',[])) if x]
         keys={(norm(m['title']),m['year']) for m in local};remote=[m for m in remote if (norm(m['title']),m['year']) not in keys]
-    return jsonify(local=local,remote=remote)
+    return jsonify(local=local,remote=remote,page=page,pages=pages)
 @app.get('/api/recommend/<int:id>')
 def rec_api(id):
     if id not in BY_ID:return jsonify(error='Movie not found'),404
@@ -188,6 +216,7 @@ def remote_detail(id):
     m=tmdb_public(d)
     if not m:return jsonify(error='Movie details unavailable'),404
     videos=[v for v in d.get('videos',{}).get('results',[]) if v.get('site')=='YouTube' and v.get('type')=='Trailer' and v.get('official') is True and re.fullmatch(r'[A-Za-z0-9_-]{11}',str(v.get('key','')))]
+    videos.sort(key=lambda v:(v.get('iso_639_1')=='en',v.get('published_at','')),reverse=True)
     m['trailer']=videos[0]['key'] if videos else None
     m['genres']=[g['name'] for g in d.get('genres',[])];m['runtime']=d.get('runtime');m['directors']=', '.join(x['name'] for x in d.get('credits',{}).get('crew',[]) if x.get('job')=='Director');m['actors']=', '.join(x['name'] for x in d.get('credits',{}).get('cast',[])[:8])
     m['related']=[x for x in (tmdb_public(y) for y in d.get('recommendations',{}).get('results',[])) if x][:12]

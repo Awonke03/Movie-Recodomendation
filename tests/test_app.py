@@ -44,3 +44,19 @@ def test_personalised():
  assert len({x['id'] for x in all_items})==len(all_items) and not set(ids)&{x['id'] for x in all_items}
  assert c.post('/api/personalised',json={'likes':['bad']}).status_code==400
  assert c.post('/api/personalised',json={'likes':[ids[0]],'dislikes':[ids[0]]}).status_code==400
+
+
+def test_live_discovery_filters(monkeypatch):
+ from datetime import date
+ monkeypatch.setattr(m,'TOKEN','test-token');calls=[]
+ def fake(path,**params):
+  calls.append((path,params));return {'results':[{'id':123456,'title':'New Film','release_date':date.today().isoformat(),'genre_ids':[878],'poster_path':'/poster.jpg'},{'id':3,'title':'Excluded','adult':True}],'total_pages':4,'total_results':66}
+ monkeypatch.setattr(m,'tmdb',fake);c=m.app.test_client()
+ r=c.get('/api/discover?category=recent&genre=Sci-Fi&page=2');assert r.status_code==200
+ assert calls[-1][0]=='discover/movie' and calls[-1][1]['with_genres']==878 and calls[-1][1]['page']==2
+ assert r.json['pages']==4 and len(r.json['items'])==1 and r.json['items'][0]['genres']==['Sci-Fi']
+ assert c.get('/api/discover?category=bad').status_code==400
+ assert c.get('/api/discover?decade=bad').status_code==400
+ assert c.get('/api/discover?category=classics&decade=2020').json['items']==[]
+ assert c.get('/api/search?q=new&page=2').json['pages']==4
+ monkeypatch.setattr(m,'TOKEN','');monkeypatch.setattr(m,'API_KEY','');assert c.get('/api/discover').status_code==503

@@ -19,6 +19,19 @@ try:
   page.locator('#saved-cards .poster').first.click();expect(page.locator('#details')).to_be_visible();expect(page.locator('#details a[href*="imdb.com"]')).to_be_visible();page.locator('#close-detail').click();expect(page.locator('#details')).to_be_hidden()
   if page.locator('#for-you-nav').is_visible():
    page.locator('[data-view="discover"]').click();page.locator('#cards .taste-actions button').first.click();page.locator('#for-you-nav').click();expect(page.locator('#section-title')).to_have_text('For You');expect(page.locator('#cards .movie')).to_have_count(24);expect(page.locator('#profile-count')).to_contain_text('1 liked')
+  # Mock provider data, not a live trailer playback test.
+  live=b.new_page(viewport={'width':1440,'height':900});movie={'provider':'TMDB','tmdb_id':123456,'title':'Example movie','year':2026,'genres':['Action'],'poster':'https://image.tmdb.org/t/p/w500/example.jpg','backdrop':'https://image.tmdb.org/t/p/w1280/example.jpg'}
+  live.route('**/api/health',lambda route:route.fulfill(json={'tmdb':True,'personalisation':False}))
+  live.route('**/api/discover?*',lambda route:route.fulfill(json={'items':[movie],'total':1,'pages':1,'genres':['Action'],'decades':[2020,2010]}))
+  live.route('**/api/tmdb/123456',lambda route:route.fulfill(json={**movie,'trailer':'ABCDEFGHIJK','related':[]}))
+  live.route('https://www.youtube-nocookie.com/**',lambda route:route.fulfill(body='mock player'))
+  live.route('https://image.tmdb.org/**',lambda route:route.abort())
+  live.goto('http://127.0.0.1:8050');expect(live.locator('#section-title')).to_have_text('Recent releases');live.locator('#cards .poster').first.click();expect(live.locator('.trailer-play')).to_be_visible()
+  panel=live.locator('.trailer-panel').bounding_box();info=live.locator('.detail-info').bounding_box();assert panel['x']>info['x']
+  live.locator('.trailer-play').click();expect(live.locator('#detail-trailer iframe')).to_have_attribute('src','https://www.youtube-nocookie.com/embed/ABCDEFGHIJK?autoplay=1&rel=0')
+  live.locator('#close-detail').click();expect(live.locator('#detail-trailer iframe')).to_have_count(0)
+  live.locator('#collection').select_option('classics');expect(live.locator('#section-title')).to_have_text('Classic cinema')
+  live.close()
   assert not errors,errors
   b.close()
 finally:p.terminate();p.wait(timeout=10)
