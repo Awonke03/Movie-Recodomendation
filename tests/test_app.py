@@ -40,5 +40,7 @@ def test_personalised():
  if m.TRAINED is None:assert r.status_code==503;return
  assert r.status_code==200 and r.json['liked']==3
  assert len(r.json['items'])==24 and not set(ids)&{x['id'] for x in r.json['items']}
+ all_items=r.json['items']+[x for rail in r.json['rails'] for x in rail['items']]
+ assert len({x['id'] for x in all_items})==len(all_items) and not set(ids)&{x['id'] for x in all_items}
  assert c.post('/api/personalised',json={'likes':['bad']}).status_code==400
  assert c.post('/api/personalised',json={'likes':[ids[0]],'dislikes':[ids[0]]}).status_code==400

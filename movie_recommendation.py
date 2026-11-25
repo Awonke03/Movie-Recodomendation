@@ -1,6 +1,7 @@
 """CineMatch: content-based recommendation and optional licensed movie metadata."""
 import csv,os,re,math,unicodedata
 from pathlib import Path
+from collections import Counter
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlencode,quote,urlparse
@@ -155,7 +156,14 @@ def personalised():
     genre=data.get('genre','')
     if not isinstance(genre,str) or (genre and genre not in GENRES):return jsonify(error='Unknown genre'),400
     result=rank(TRAINED,likes,dislikes,genre=genre,limit=24,diversity=True)
-    return jsonify(items=[compact(MOVIES[i]) for i in result],liked=len(likes),disliked=len(dislikes),mode='personalised' if likes else 'popular')
+    rails=[];used=set(result)
+    if likes and not genre:
+        taste=Counter(g for i in likes for g in MOVIES[i]['genres'])
+        for g,_ in taste.most_common(2):
+            shelf=rank(TRAINED,likes,dislikes,exclude=used,genre=g,limit=12,diversity=True)
+            if shelf:
+                rails.append({'title':g+' picks','items':[compact(MOVIES[i]) for i in shelf]});used.update(shelf)
+    return jsonify(items=[compact(MOVIES[i]) for i in result],rails=rails,liked=len(likes),disliked=len(dislikes),mode='personalised' if likes else 'popular')
 @app.get('/api/model')
 def model_info():
     if MODEL_REPORT is None:return jsonify(available=False)

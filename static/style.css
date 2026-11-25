@@ -2,3 +2,5 @@
 @media(max-width:420px){header{gap:5px}.brand{font-size:19px;gap:6px}.brand img{width:31px;height:31px}nav{gap:0;flex-wrap:wrap;justify-content:flex-end}nav button{padding:7px 6px;font-size:12px}.hero h1{overflow-wrap:anywhere}.filters select{max-width:100%}}
 
 .taste-actions{display:flex;gap:5px;margin-top:8px}.taste-actions button{flex:1;background:#151c29;border:1px solid #363c4d;border-radius:7px;padding:6px;font-size:11px}.taste-actions button.selected{background:#56303d;border-color:#ff6677;color:#ffbdc4}#profile-toolbar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 13px;color:#a4a6b8;font-size:12px}@media(max-width:680px){nav{flex-wrap:wrap}}
+
+.movie-rail{margin-top:30px;min-width:0}.movie-rail h2{font-size:23px;margin-bottom:12px}.cards.shelf{display:grid;grid-auto-flow:column;grid-template-columns:none;grid-auto-columns:clamp(140px,17vw,200px);overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity;padding:5px 2px 16px;scrollbar-color:#573546 #131724}.shelf .movie{scroll-snap-align:start}@media(max-width:680px){.cards.shelf{grid-auto-columns:145px}}

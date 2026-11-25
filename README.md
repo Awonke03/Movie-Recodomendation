@@ -29,3 +29,5 @@ MovieLens latest-small ratings and linked movie identifiers are downloaded from 
 The training notebook `CineMatch_Training.ipynb` requires pandas for displaying results (`pip install pandas`).
 
 Extended rankers: EASE regularised linear item autoencoder, two EASE hybrids (14 candidates). Optional larger benchmark `python train_recommender.py --dataset 25m --out model-large` samples all interactions of users whose ID is divisible by 32 from MovieLens 25M, uses a training-only 12,000-item catalogue cap and reports excluded ratings. This is a separate historical benchmark, not guaranteed to be disjoint from latest-small; it does not automatically replace the serving artifacts. No claims of independent new users or live engagement are made.
+
+For You now includes genre-based, non-overlapping recommendation shelves derived from the liked movies, with seen preference items excluded and lightweight diversity re-ranking. This is an additional serving feature, not a claim that the shelves were independently user-tested.
