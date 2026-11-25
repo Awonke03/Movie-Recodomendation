@@ -30,7 +30,11 @@ def parse_movies(path):
             movies.append(dict(id=id,title=display_title(title),year=year,directors=(row.get('directors') or '').strip(),actors=(row.get('actors') or '').strip(),genres=(row.get('genres') or '').split()))
     if not movies:raise RuntimeError('No usable movies')
     return movies
-MOVIES=parse_movies(ROOT/'movielens_100k.csv')
+from recommender import load_artifacts,rank,scores,combine
+TRAINED=None;MODEL_REPORT=None
+if (ROOT/'model'/'report.json').exists():
+    TRAINED,MODEL_REPORT=load_artifacts(ROOT/'model')
+MOVIES=TRAINED['movies'] if TRAINED is not None else parse_movies(ROOT/'movielens_100k.csv')
 BY_ID={x['id']:i for i,x in enumerate(MOVIES)}
 def matrix():
     blocks=[]
@@ -39,18 +43,23 @@ def matrix():
         vec=TfidfVectorizer(token_pattern=r'(?u)\b\w+\b',ngram_range=(1,2),sublinear_tf=True)
         blocks.append(vec.fit_transform(vals)*math.sqrt(weight))
     return hstack(blocks).tocsr()
-MATRIX=matrix()
+MATRIX=None if TRAINED is not None else matrix()
 GENRES=sorted({g for m in MOVIES for g in m['genres']})
 def compact(m):
-    return {k:m[k] for k in ('id','title','year','genres','directors')}
+    return {k:m[k] for k in ('id','title','year','genres','directors','tmdb_id','imdb_id') if k in m}
 def recommend(id,limit=12,genre='',minyear=0,maxyear=2100):
-    idx=BY_ID[id]; scores=(MATRIX@MATRIX[idx].T).toarray().ravel()
-    seed=MOVIES[idx];ordered=np.lexsort((np.array([m['id'] for m in MOVIES]),-scores))
+    idx=BY_ID[id]
+    if TRAINED is not None:
+        parts=scores(TRAINED,[idx]);s=combine(parts,TRAINED['champion'])
+        order=rank(TRAINED,[idx],genre=genre,limit=limit)
+        return [{**compact(MOVIES[i]),'shared_genres':sorted(set(MOVIES[idx]['genres'])&set(MOVIES[i]['genres'])),'recommendation_type':'learned ranking'} for i in order if minyear<=MOVIES[i]['year']<=maxyear]
+    scores_=(MATRIX@MATRIX[idx].T).toarray().ravel()
+    seed=MOVIES[idx];ordered=np.lexsort((np.array([m['id'] for m in MOVIES]),-scores_))
     out=[];seen={(norm(seed['title']),seed['year'])}
     for i in ordered:
         m=MOVIES[i];key=(norm(m['title']),m['year'])
-        if i==idx or key in seen or scores[i]<=0 or genre and genre not in m['genres'] or not minyear<=m['year']<=maxyear:continue
-        seen.add(key);out.append({**compact(m),'similarity':round(float(scores[i]),4),'shared_genres':sorted(set(seed['genres'])&set(m['genres']))})
+        if i==idx or key in seen or scores_[i]<=0 or genre and genre not in m['genres'] or not minyear<=m['year']<=maxyear:continue
+        seen.add(key);out.append({**compact(m),'similarity':round(float(scores_[i]),4),'shared_genres':sorted(set(seed['genres'])&set(m['genres']))})
         if len(out)>=limit:break
     return out
 def search(q):
@@ -86,6 +95,9 @@ def apple_movie(m):
 def metadata(id):
     m=MOVIES[BY_ID[id]]
     if TOKEN or API_KEY:
+        if m.get('tmdb_id'):
+            linked=tmdb('movie/'+str(m['tmdb_id']))
+            if linked.get('id')==m['tmdb_id']:return tmdb_public(linked) or {}
         rs=tmdb('search/movie',query=m['title'],year=m['year'],include_adult='false').get('results',[])
         matched=[x for x in rs if norm(x.get('title',''))==norm(m['title']) and str(x.get('release_date',''))[:4]==str(m['year'])]
         if len(matched)==1:return tmdb_public(matched[0]) or {}
@@ -99,7 +111,7 @@ def headers(res):
 @app.get('/')
 def index():return send_from_directory(app.static_folder,'index.html')
 @app.get('/health')
-def health():return jsonify(status='ok',movies=len(MOVIES),tmdb=bool(TOKEN or API_KEY))
+def health():return jsonify(status='ok',movies=len(MOVIES),tmdb=bool(TOKEN or API_KEY),personalisation=TRAINED is not None)
 @app.get('/api/trending')
 def trending():
     if not (TOKEN or API_KEY):return jsonify(items=[],available=False)
@@ -111,7 +123,7 @@ def catalog():
     genre=request.args.get('genre','');decade=request.args.get('decade','',type=str);q=request.args.get('q','')[:100]
     if genre and genre not in GENRES:return jsonify(error='Unknown genre'),400
     if decade and not re.fullmatch(r'\d{4}',decade):return jsonify(error='Invalid decade'),400
-    page=max(1,min(100,request.args.get('page',1,type=int)));n=24
+    page=max(1,min(1000,request.args.get('page',1,type=int)));n=24
     pool=[m for m in MOVIES if (not genre or genre in m['genres']) and (not decade or int(decade)<=m['year']<int(decade)+10) and (not q or norm(q) in norm(m['title']))]
     pool.sort(key=lambda m:(-m['year'],m['id']))
     return jsonify(items=[compact(m) for m in pool[(page-1)*n:page*n]],total=len(pool),genres=GENRES,decades=sorted({m['year']//10*10 for m in MOVIES},reverse=True),page=page)
@@ -129,6 +141,23 @@ def rec_api(id):
     genre=request.args.get('genre','')
     if genre and genre not in GENRES:return jsonify(error='Unknown genre'),400
     return jsonify(seed=compact(MOVIES[BY_ID[id]]),items=recommend(id,genre=genre))
+@app.post('/api/personalised')
+def personalised():
+    if TRAINED is None:return jsonify(error='Trained model unavailable'),503
+    data=request.get_json(silent=True)
+    if not isinstance(data,dict):return jsonify(error='Invalid profile'),400
+    liked=data.get('likes',[]);disliked=data.get('dislikes',[])
+    if not all(isinstance(x,list) and len(x)<=100 and all(type(i) is int for i in x) for x in (liked,disliked)):return jsonify(error='Invalid profile'),400
+    if set(liked)&set(disliked):return jsonify(error='Conflicting preferences'),400
+    likes=list(dict.fromkeys(BY_ID[i] for i in liked if i in BY_ID));dislikes=list(dict.fromkeys(BY_ID[i] for i in disliked if i in BY_ID))
+    genre=data.get('genre','')
+    if not isinstance(genre,str) or (genre and genre not in GENRES):return jsonify(error='Unknown genre'),400
+    result=rank(TRAINED,likes,dislikes,genre=genre,limit=24,diversity=True)
+    return jsonify(items=[compact(MOVIES[i]) for i in result],liked=len(likes),disliked=len(dislikes),mode='personalised' if likes else 'popular')
+@app.get('/api/model')
+def model_info():
+    if MODEL_REPORT is None:return jsonify(available=False)
+    return jsonify(available=True,ratings=MODEL_REPORT['ratings'],users=MODEL_REPORT['users'],movies=MODEL_REPORT['movies'],champion=MODEL_REPORT['champion'])
 @app.get('/api/movie/<int:id>')
 def detail(id):
     if id not in BY_ID:return jsonify(error='Movie not found'),404

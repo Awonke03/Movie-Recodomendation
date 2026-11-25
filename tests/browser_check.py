@@ -17,6 +17,8 @@ try:
   page.locator('#cards .movie .similar').first.click();expect(page.locator('#section-title')).to_contain_text('Because you like');expect(page.locator('#cards .movie').first).to_be_visible()
   page.locator('#cards .movie .save').first.click();expect(page.locator('#watch-count')).to_have_text('1');page.locator('[data-view="watchlist"]').click();expect(page.locator('#saved-cards .movie')).to_have_count(1)
   page.locator('#saved-cards .poster').first.click();expect(page.locator('#details')).to_be_visible();expect(page.locator('#details a[href*="imdb.com"]')).to_be_visible();page.locator('#close-detail').click();expect(page.locator('#details')).to_be_hidden()
+  if page.locator('#for-you-nav').is_visible():
+   page.locator('[data-view="discover"]').click();page.locator('#cards .taste-actions button').first.click();page.locator('#for-you-nav').click();expect(page.locator('#section-title')).to_have_text('For You');expect(page.locator('#cards .movie')).to_have_count(24);expect(page.locator('#profile-count')).to_contain_text('1 liked')
   assert not errors,errors
   b.close()
 finally:p.terminate();p.wait(timeout=10)

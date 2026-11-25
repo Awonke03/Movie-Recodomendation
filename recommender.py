@@ -59,7 +59,7 @@ def rank(model,likes,dislikes=(),exclude=(),genre='',limit=24,name=None,diversit
         genre_counts[g]=genre_counts.get(g,0)+1;out.append(int(i))
         if len(out)>=limit:break
     if len(out)<limit:
-        out.extend(int(i) for i in order if np.isfinite(s[i]) and int(i) not in out)
+        selected=set(out);out.extend(int(i) for i in order if np.isfinite(s[i]) and int(i) not in selected)
     return out[:limit]
 def load_artifacts(path):
     import json
