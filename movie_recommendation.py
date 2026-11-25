@@ -100,6 +100,12 @@ def headers(res):
 def index():return send_from_directory(app.static_folder,'index.html')
 @app.get('/health')
 def health():return jsonify(status='ok',movies=len(MOVIES),tmdb=bool(TOKEN or API_KEY))
+@app.get('/api/trending')
+def trending():
+    if not (TOKEN or API_KEY):return jsonify(items=[],available=False)
+    data=tmdb('trending/movie/week',language='en-US')
+    items=[x for x in (tmdb_public(m) for m in data.get('results',[]) if not m.get('adult',False)) if x]
+    return jsonify(items=items,available=bool(items))
 @app.get('/api/catalog')
 def catalog():
     genre=request.args.get('genre','');decade=request.args.get('decade','',type=str);q=request.args.get('q','')[:100]

@@ -20,3 +20,5 @@ pip install pytest playwright
 pytest -q
 python -m playwright install chromium
 python tests/browser_check.py
+
+With TMDB enabled, CineMatch opens on current weekly trending movies, while Discover opens the original local catalogue. Without credentials, the historical catalogue remains the landing page. Trending results and remote related-film recommendations are supplied by TMDB, not the locally fitted model.

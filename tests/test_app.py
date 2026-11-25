@@ -18,3 +18,17 @@ def test_missing_metadata(monkeypatch):
  monkeypatch.setattr(m,'TOKEN','');monkeypatch.setattr(m,'API_KEY','');m.metadata.cache_clear()
  c=m.app.test_client();assert c.get('/api/media/'+str(m.MOVIES[0]['id'])).get_json()=={}
  assert c.get('/api/tmdb/1').status_code==503
+
+def test_trending_and_metadata_matching(monkeypatch):
+ monkeypatch.setattr(m,'TOKEN','test-token')
+ movie=m.MOVIES[0]
+ item={'id':123,'title':movie['title'],'release_date':str(movie['year'])+'-01-01','poster_path':'/example.jpg','backdrop_path':'/back.jpg','vote_average':7.2,'vote_count':100}
+ def fake(path,**params):
+  if path.startswith('trending'):return {'results':[item]}
+  if path=='search/movie':return {'results':[item,{**item,'id':999,'release_date':'2020-01-01'}]}
+  return {**item,'videos':{'results':[{'site':'YouTube','type':'Trailer','official':True,'key':'ABCDEFGHIJK'}]}}
+ monkeypatch.setattr(m,'tmdb',fake);m.metadata.cache_clear();c=m.app.test_client()
+ assert c.get('/api/trending').get_json()['items'][0]['poster']=='https://image.tmdb.org/t/p/w500/example.jpg'
+ assert c.get('/api/media/'+str(movie['id'])).get_json()['tmdb_id']==123
+ assert c.get('/api/tmdb/123').get_json()['trailer']=='ABCDEFGHIJK'
+ m.metadata.cache_clear()
