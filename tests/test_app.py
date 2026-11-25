@@ -25,7 +25,7 @@ def test_trending_and_metadata_matching(monkeypatch):
  item={'id':movie.get('tmdb_id') or 123,'title':movie['title'],'release_date':str(movie['year'])+'-01-01','poster_path':'/example.jpg','backdrop_path':'/back.jpg','vote_average':7.2,'vote_count':100}
  def fake(path,**params):
   if path.startswith('trending'):return {'results':[item]}
-  if path=='movie/'+str(movie.get('tmdb_id')):return item
+  if path=='movie/'+str(movie.get('tmdb_id')) and not params.get('append_to_response'):return item
   if path=='search/movie':return {'results':[item,{**item,'id':999,'release_date':'2020-01-01'}]}
   return {**item,'videos':{'results':[{'site':'YouTube','type':'Trailer','official':True,'key':'ABCDEFGHIJK'}]}}
  monkeypatch.setattr(m,'tmdb',fake);m.metadata.cache_clear();c=m.app.test_client()

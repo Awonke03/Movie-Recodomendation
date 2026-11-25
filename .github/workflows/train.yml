@@ -5,6 +5,9 @@ on:
     paths:
       - train_recommender.py
       - recommender.py
+      - movie_recommendation.py
+      - static/**
+      - tests/**
       - .github/workflows/train.yml
 jobs:
   train:
@@ -19,7 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt pytest
+      - run: pip install -r requirements.txt pytest playwright
       - run: python train_recommender.py
       - run: pytest -q
       - run: python -m playwright install --with-deps chromium

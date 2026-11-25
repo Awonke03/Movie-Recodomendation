@@ -47,7 +47,10 @@ def scores(model,likes,dislikes=()):
 def combine(parts,name):
     return sum(w*parts[k] for k,w in CANDIDATES[name].items())
 def rank(model,likes,dislikes=(),exclude=(),genre='',limit=24,name=None,diversity=False):
-    p=scores(model,likes,dislikes);s=combine(p,name or model['champion'])
+    p=scores(model,likes,dislikes);chosen=name or model['champion']
+    # Cold-title fallback: no collaborative evidence for any liked title.
+    if likes and not np.any(model['pop'][likes]>0) and chosen!='content':chosen='content'
+    s=combine(p,chosen)
     s=np.array(s,copy=True);blocked=set(likes)|set(dislikes)|set(exclude)
     for i in blocked:s[i]=-np.inf
     if genre:

@@ -53,7 +53,7 @@ def acquire_large(path):
             temp.replace(path)
         finally:
             if temp.exists():temp.unlink()
-    sha=hashlib.file_digest(path.open('rb'),'sha256').hexdigest()
+    with path.open('rb') as stream:sha=hashlib.file_digest(stream,'sha256').hexdigest()
     with zipfile.ZipFile(path) as z:
         def rows(name):
             with z.open('ml-25m/'+name) as stream:

@@ -36,6 +36,7 @@ if (ROOT/'model'/'report.json').exists():
     TRAINED,MODEL_REPORT=load_artifacts(ROOT/'model')
 MOVIES=TRAINED['movies'] if TRAINED is not None else parse_movies(ROOT/'movielens_100k.csv')
 BY_ID={x['id']:i for i,x in enumerate(MOVIES)}
+TMDB_TO_LOCAL={m['tmdb_id']:m for m in MOVIES if m.get('tmdb_id')}
 def matrix():
     blocks=[]
     for field,weight in [('genres',.48),('directors',.24),('actors',.23),('year',.05)]:
@@ -79,7 +80,8 @@ def tmdb_public(m):
     if not isinstance(pid,int) or not title:return None
     path=m.get('poster_path');back=m.get('backdrop_path')
     safe=lambda p:bool(isinstance(p,str) and re.fullmatch(r'/[A-Za-z0-9_.-]+',p))
-    return {'provider':'TMDB','tmdb_id':pid,'title':title,'year':int(date[:4]) if date[:4].isdigit() else None,'poster':'https://image.tmdb.org/t/p/w500'+path if safe(path) else None,'backdrop':'https://image.tmdb.org/t/p/w1280'+back if safe(back) else None,'overview':m.get('overview') or '', 'rating':round(m.get('vote_average') or 0,1) if m.get('vote_count',0)>0 else None,'rating_count':m.get('vote_count',0),'url':'https://www.themoviedb.org/movie/'+str(pid)}
+    local=TMDB_TO_LOCAL.get(pid)
+    return {**({'id':local['id'],'genres':local['genres'],'imdb_id':local.get('imdb_id')} if local else {}),'provider':'TMDB','tmdb_id':pid,'title':title,'year':int(date[:4]) if date[:4].isdigit() else None,'poster':'https://image.tmdb.org/t/p/w500'+path if safe(path) else None,'backdrop':'https://image.tmdb.org/t/p/w1280'+back if safe(back) else None,'overview':m.get('overview') or '', 'rating':round(m.get('vote_average') or 0,1) if m.get('vote_count',0)>0 else None,'rating_count':m.get('vote_count',0),'url':'https://www.themoviedb.org/movie/'+str(pid)}
 def apple_movie(m):
     # Apple storefront metadata only; no downloading/caching of media files.
     try:
