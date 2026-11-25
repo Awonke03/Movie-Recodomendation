@@ -1,0 +1,25 @@
+name: CineMatch larger benchmark
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/large_benchmark.yml
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pytest
+      - run: python train_recommender.py --dataset 25m --out model-large
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cinematch-large-benchmark
+          path: model-large/

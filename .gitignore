@@ -5,3 +5,6 @@ __pycache__/
 
 model/
 data/ml-latest-small.zip
+
+model-large/
+data/ml-25m.zip
