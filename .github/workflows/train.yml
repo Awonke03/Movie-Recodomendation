@@ -1,0 +1,28 @@
+name: CineMatch model training
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - train_recommender.py
+      - recommender.py
+      - .github/workflows/train.yml
+jobs:
+  train:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pytest
+      - run: python train_recommender.py
+      - run: pytest -q
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cinematch-trained-model
+          path: model/

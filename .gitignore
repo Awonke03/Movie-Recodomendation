@@ -2,3 +2,6 @@ __pycache__/
 .pytest_cache/
 .env
 .venv/
+
+model/
+data/ml-latest-small.zip
