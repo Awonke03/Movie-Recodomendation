@@ -1,152 +1,150 @@
-
-import pandas as pd
+"""CineMatch: content-based recommendation and optional licensed movie metadata."""
+import csv,os,re,math,unicodedata
+from pathlib import Path
+from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlencode,quote,urlparse
+import requests
 import numpy as np
-import dash
-from dash import dash_core_components as dcc
-import dash_html_components as html
-from dash.dependencies import Input, Output, State
-import plotly.express as px
-from sklearn.model_selection import train_test_split
-
+from flask import Flask, jsonify, request, send_from_directory
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import linear_kernel
-
-url = 'https://github.com/Awonke03/Movie-Recodomendation/blob/main/movielens_100k.csv'
-
-# Read the CSV file into a pandas DataFrame
-dt = pd.read_csv(url)
-
-dt.head()
-
-dt.columns
-
-dt.info()
-len(dt.directors.unique())
-
-len(dt.title.unique())
-
-y=dt["title"]
-X=dt.drop(columns="title")
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Preprocess data for recommendation engine
-dt['year'] = dt['year'].fillna('')
-dt['directors'] = dt['directors'].fillna('')
-dt['actors'] = dt['actors'].fillna('')
-dt['genres'] = dt['genres'].fillna('')
-dt['combined_features'] = dt['year'].astype(str) + ' ' + dt['directors'] + ' ' + dt['actors'] + ' ' + dt['genres']
-
-tfidf = TfidfVectorizer(stop_words='english')
-tfidf_matrix = tfidf.fit_transform(dt['combined_features'])
-cosine_sim = linear_kernel(tfidf_matrix, tfidf_matrix)
-
-
-fig1 = px.scatter(dt.explode('genres'), x='directors', y='genres', title="Relationship between Directors and Genres")
-fig1.update_layout(
-    xaxis_title="Director",
-    yaxis_title="Genre",
-    height=800,
-    width=1350,
-)
-
-# Visualization 2: Number of Movies in Each Genre
-fig2 = px.bar(dt['genres'].str.split(expand=True).stack().reset_index(name='Genre'), x='Genre', title="Number of Movies in Each Genre")
-fig2.update_layout(xaxis_title="Genre", yaxis_title="Number of Movies", height=800, width=1350)
-
-# Visualization 3: Top Directors with the Most Movies
-fig3 = px.bar(dt['directors'].value_counts().reset_index(), x='index', y='directors', title="Top Directors with the Most Movies")
-fig3.update_layout(xaxis_title="Director", yaxis_title="Number of Movies", height=800, width=1350)
-
-years_count = dt.year.value_counts().sort_index()
-df = pd.DataFrame({'Year': years_count.index, 'Count': years_count.values})
-# Visualization 4: Yearly Counts
-fig4 = px.line(df, x='Year', y='Count', markers=True, title='Yearly Counts',
-              labels={'Count': 'Number of Occurrences', 'Year': 'Year'})
-fig4.update_layout(height=800, width=1350)
-
-# Create Dash app
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
-
-dt.dropna(inplace=True)
-
-# Visualization 5: Sunburst chart
-fig5 = px.sunburst(dt, path=['year', 'genres', 'title'])
-fig5.update_layout(title_text="Genres and Movies by Year", height=800, width=1350)
-
-# Default layout
-default_layout = html.Div([
-    html.H1("Movie Recommendations", style={'text-align': 'center'}),
-
-    dcc.Input(id='movie-input', type='text', placeholder='Enter a movie title', style={'width': '50%', 'margin': '10px'}),
-    html.Button(id='submit-button', n_clicks=0, children='Get Recommendations', style={'margin': '10px'}),
-
-    html.Div(id='recommendations-output', style={'margin': '20px'})
-])
-
-# Define app layout
-app.layout = html.Div(children=[
-    html.Div(
-        className='menu',
-        children=[
-            html.Button('Search and Recommendations', id='btn-0', n_clicks=0, style={'backgroundColor': 'darkgrey', 'border-radius': '12px', 'margin-bottom': '10px'}),
-            html.Button('Directors and Genres', id='btn-1', n_clicks=0, style={'backgroundColor': 'darkgrey', 'border-radius': '12px', 'margin-bottom': '10px'}),
-            html.Button('Number of Movies in Each Genre', id='btn-2', n_clicks=0, style={'backgroundColor': 'darkgrey', 'border-radius': '12px', 'margin-bottom': '10px'}),
-            html.Button('Top Directors with the Most Movies', id='btn-3', n_clicks=0, style={'backgroundColor': 'darkgrey', 'border-radius': '12px', 'margin-bottom': '10px'}),
-            html.Button('Yearly Counts', id='btn-4', n_clicks=0, style={'backgroundColor': 'darkgrey', 'border-radius': '12px', 'margin-bottom': '10px'}),
-            html.Button('Sunburst Chart', id='btn-5', n_clicks=0, style={'backgroundColor': 'darkgrey', 'border-radius': '12px', 'margin-bottom': '10px'}),
-        ]
-    ),
-
-    html.Div(id='page-content', style={'backgroundColor': 'darkgrey', 'padding': '20px'}),
-])
-
-# Callback to update page content based on button clicks
-@app.callback(Output('page-content', 'children'),
-              [Input('btn-0', 'n_clicks'),
-               Input('btn-1', 'n_clicks'),
-               Input('btn-2', 'n_clicks'),
-               Input('btn-3', 'n_clicks'),
-               Input('btn-4', 'n_clicks'),
-               Input('btn-5', 'n_clicks')])
-def display_page(btn0, btn1, btn2, btn3, btn4, btn5):
-    ctx = dash.callback_context
-    button_id = ctx.triggered_id.split('.')[0] if ctx.triggered_id else 'btn-0'
-
-    if button_id == 'btn-0':
-        return default_layout
-    elif button_id == 'btn-1':
-        return dcc.Graph(figure=fig1)
-    elif button_id == 'btn-2':
-        return dcc.Graph(figure=fig2)
-    elif button_id == 'btn-3':
-        return dcc.Graph(figure=fig3)
-    elif button_id == 'btn-4':
-        return dcc.Graph(figure=fig4)
-    elif button_id == 'btn-5':
-        return dcc.Graph(figure=fig5)
-    else:
-        return default_layout
-
-# Callback to handle button click and display recommendations
-@app.callback(Output('recommendations-output', 'children'),
-              [Input('submit-button', 'n_clicks')],
-              [State('movie-input', 'value')])
-def get_recommendations(n_clicks, movie_title):
-    if n_clicks > 0 and movie_title:
-        if movie_title not in dt['title'].values:
-            return f"Movie with title '{movie_title}' not found in the dataset."
-
-        idx = dt[dt['title'] == movie_title].index[0]
-        sim_scores = list(enumerate(cosine_sim[idx]))
-        sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-        sim_scores = sim_scores[1:11]
-        movie_indices = [i[0] for i in sim_scores]
-        recommended_movies = dt['title'].iloc[movie_indices]
-
-        return html.Ul([html.Li(movie) for movie in recommended_movies])
-
-    return ""
-
-# Run the server
-if __name__ == '__main__':
-    app.run_server(debug=True, host='127.0.0.1', port=8050)
+from scipy.sparse import hstack
+ROOT=Path(__file__).resolve().parent
+app=Flask(__name__,static_folder='static',static_url_path='/static')
+app.config['MAX_CONTENT_LENGTH']=16384
+TOKEN=os.environ.get('TMDB_READ_TOKEN','').strip()
+API_KEY=os.environ.get('TMDB_API_KEY','').strip()
+def norm(s):
+    return ' '.join(re.findall(r'[a-z0-9]+',unicodedata.normalize('NFKD',str(s)).encode('ascii','ignore').decode().lower()))
+def display_title(s):
+    return s.strip().title() if s.islower() else s.strip()
+def parse_movies(path):
+    movies=[];seen=set()
+    with open(path,encoding='utf-8-sig',newline='') as f:
+        for row in csv.DictReader(f):
+            title=(row.get('title') or '').strip()
+            try:year=int(float(row.get('year') or 0));id=int(row['movie_id'])
+            except (ValueError,TypeError,KeyError):continue
+            if not title or not 1870<=year<=2100 or id in seen:continue
+            seen.add(id)
+            movies.append(dict(id=id,title=display_title(title),year=year,directors=(row.get('directors') or '').strip(),actors=(row.get('actors') or '').strip(),genres=(row.get('genres') or '').split()))
+    if not movies:raise RuntimeError('No usable movies')
+    return movies
+MOVIES=parse_movies(ROOT/'movielens_100k.csv')
+BY_ID={x['id']:i for i,x in enumerate(MOVIES)}
+def matrix():
+    blocks=[]
+    for field,weight in [('genres',.48),('directors',.24),('actors',.23),('year',.05)]:
+        vals=[' '.join(m[field]) if isinstance(m[field],list) else str(m[field]) for m in MOVIES]
+        vec=TfidfVectorizer(token_pattern=r'(?u)\b\w+\b',ngram_range=(1,2),sublinear_tf=True)
+        blocks.append(vec.fit_transform(vals)*math.sqrt(weight))
+    return hstack(blocks).tocsr()
+MATRIX=matrix()
+GENRES=sorted({g for m in MOVIES for g in m['genres']})
+def compact(m):
+    return {k:m[k] for k in ('id','title','year','genres','directors')}
+def recommend(id,limit=12,genre='',minyear=0,maxyear=2100):
+    idx=BY_ID[id]; scores=(MATRIX@MATRIX[idx].T).toarray().ravel()
+    seed=MOVIES[idx];ordered=np.lexsort((np.array([m['id'] for m in MOVIES]),-scores))
+    out=[];seen={(norm(seed['title']),seed['year'])}
+    for i in ordered:
+        m=MOVIES[i];key=(norm(m['title']),m['year'])
+        if i==idx or key in seen or scores[i]<=0 or genre and genre not in m['genres'] or not minyear<=m['year']<=maxyear:continue
+        seen.add(key);out.append({**compact(m),'similarity':round(float(scores[i]),4),'shared_genres':sorted(set(seed['genres'])&set(m['genres']))})
+        if len(out)>=limit:break
+    return out
+def search(q):
+    q=norm(q)
+    if not q:return []
+    terms=q.split()
+    return [compact(m) for m in sorted((m for m in MOVIES if all(t in norm(m['title']+' '+str(m['year'])) for t in terms)),key=lambda m:(norm(m['title'])!=q,not norm(m['title']).startswith(q),len(m['title']),-m['year'],m['id']))[:30]]
+def tmdb(path,**params):
+    if not (TOKEN or API_KEY):return {}
+    if API_KEY and not TOKEN:params['api_key']=API_KEY
+    try:
+        res=requests.get('https://api.themoviedb.org/3/'+path,params=params,headers={'Authorization':'Bearer '+TOKEN} if TOKEN else {},timeout=6)
+        res.raise_for_status();return res.json()
+    except (requests.RequestException,ValueError):return {}
+def tmdb_public(m):
+    title=m.get('title','');date=m.get('release_date','');pid=m.get('id')
+    if not isinstance(pid,int) or not title:return None
+    path=m.get('poster_path');back=m.get('backdrop_path')
+    safe=lambda p:bool(isinstance(p,str) and re.fullmatch(r'/[A-Za-z0-9_.-]+',p))
+    return {'provider':'TMDB','tmdb_id':pid,'title':title,'year':int(date[:4]) if date[:4].isdigit() else None,'poster':'https://image.tmdb.org/t/p/w500'+path if safe(path) else None,'backdrop':'https://image.tmdb.org/t/p/w1280'+back if safe(back) else None,'overview':m.get('overview') or '', 'rating':round(m.get('vote_average') or 0,1) if m.get('vote_count',0)>0 else None,'rating_count':m.get('vote_count',0),'url':'https://www.themoviedb.org/movie/'+str(pid)}
+def apple_movie(m):
+    # Apple storefront metadata only; no downloading/caching of media files.
+    try:
+        res=requests.get('https://itunes.apple.com/search',params={'term':m['title'],'media':'movie','entity':'movie','country':'ZA','limit':15},timeout=6);res.raise_for_status()
+        matches=[x for x in res.json().get('results',[]) if norm(x.get('trackName',''))==norm(m['title']) and str(x.get('releaseDate',''))[:4]==str(m['year'])]
+        if len(matches)!=1:return {}
+        x=matches[0];url=x.get('trackViewUrl','');art=x.get('artworkUrl100','')
+        if not url.startswith('https://') or urlparse(url).hostname not in ('itunes.apple.com','tv.apple.com'):return {}
+        if not isinstance(art,str) or urlparse(art).scheme!='https' or not (urlparse(art).hostname or '').endswith('.mzstatic.com'):return {}
+        return {'provider':'Apple','poster':art,'url':url,'overview':x.get('longDescription') or x.get('shortDescription') or ''}
+    except (requests.RequestException,ValueError,TypeError):return {}
+@lru_cache(maxsize=512)
+def metadata(id):
+    m=MOVIES[BY_ID[id]]
+    if TOKEN or API_KEY:
+        rs=tmdb('search/movie',query=m['title'],year=m['year'],include_adult='false').get('results',[])
+        matched=[x for x in rs if norm(x.get('title',''))==norm(m['title']) and str(x.get('release_date',''))[:4]==str(m['year'])]
+        if len(matched)==1:return tmdb_public(matched[0]) or {}
+    return {}
+@app.after_request
+def headers(res):
+    res.headers['X-Content-Type-Options']='nosniff'
+    res.headers['Referrer-Policy']='strict-origin-when-cross-origin'
+    res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://image.tmdb.org https://*.mzstatic.com data:; frame-src https://www.youtube-nocookie.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    return res
+@app.get('/')
+def index():return send_from_directory(app.static_folder,'index.html')
+@app.get('/health')
+def health():return jsonify(status='ok',movies=len(MOVIES),tmdb=bool(TOKEN or API_KEY))
+@app.get('/api/catalog')
+def catalog():
+    genre=request.args.get('genre','');decade=request.args.get('decade','',type=str);q=request.args.get('q','')[:100]
+    if genre and genre not in GENRES:return jsonify(error='Unknown genre'),400
+    if decade and not re.fullmatch(r'\d{4}',decade):return jsonify(error='Invalid decade'),400
+    page=max(1,min(100,request.args.get('page',1,type=int)));n=24
+    pool=[m for m in MOVIES if (not genre or genre in m['genres']) and (not decade or int(decade)<=m['year']<int(decade)+10) and (not q or norm(q) in norm(m['title']))]
+    pool.sort(key=lambda m:(-m['year'],m['id']))
+    return jsonify(items=[compact(m) for m in pool[(page-1)*n:page*n]],total=len(pool),genres=GENRES,decades=sorted({m['year']//10*10 for m in MOVIES},reverse=True),page=page)
+@app.get('/api/search')
+def search_api():
+    q=request.args.get('q','')[:100];local=search(q)
+    remote=[]
+    if len(q.strip())>=2 and (TOKEN or API_KEY):
+        remote=[x for x in (tmdb_public(m) for m in tmdb('search/movie',query=q,include_adult='false').get('results',[])) if x][:15]
+        keys={(norm(m['title']),m['year']) for m in local};remote=[m for m in remote if (norm(m['title']),m['year']) not in keys]
+    return jsonify(local=local,remote=remote)
+@app.get('/api/recommend/<int:id>')
+def rec_api(id):
+    if id not in BY_ID:return jsonify(error='Movie not found'),404
+    genre=request.args.get('genre','')
+    if genre and genre not in GENRES:return jsonify(error='Unknown genre'),400
+    return jsonify(seed=compact(MOVIES[BY_ID[id]]),items=recommend(id,genre=genre))
+@app.get('/api/movie/<int:id>')
+def detail(id):
+    if id not in BY_ID:return jsonify(error='Movie not found'),404
+    m=MOVIES[BY_ID[id]]
+    return jsonify(**compact(m),actors=m['actors'],**{'media':metadata(id)})
+@app.get('/api/media/<int:id>')
+def media(id):
+    if id not in BY_ID:return jsonify(error='Movie not found'),404
+    return jsonify(metadata(id))
+@app.get('/api/apple/<int:id>')
+def apple(id):
+    if id not in BY_ID:return jsonify(error='Movie not found'),404
+    return jsonify(apple_movie(MOVIES[BY_ID[id]]))
+@app.get('/api/tmdb/<int:id>')
+def remote_detail(id):
+    if not (TOKEN or API_KEY):return jsonify(error='Movie metadata unavailable'),503
+    d=tmdb('movie/'+str(id),append_to_response='videos,credits,recommendations')
+    m=tmdb_public(d)
+    if not m:return jsonify(error='Movie details unavailable'),404
+    videos=[v for v in d.get('videos',{}).get('results',[]) if v.get('site')=='YouTube' and v.get('type')=='Trailer' and v.get('official') is True and re.fullmatch(r'[A-Za-z0-9_-]{11}',str(v.get('key','')))]
+    m['trailer']=videos[0]['key'] if videos else None
+    m['genres']=[g['name'] for g in d.get('genres',[])];m['runtime']=d.get('runtime');m['directors']=', '.join(x['name'] for x in d.get('credits',{}).get('crew',[]) if x.get('job')=='Director');m['actors']=', '.join(x['name'] for x in d.get('credits',{}).get('cast',[])[:8])
+    m['related']=[x for x in (tmdb_public(y) for y in d.get('recommendations',{}).get('results',[])) if x][:12]
+    return jsonify(m)
+if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',8050)))
