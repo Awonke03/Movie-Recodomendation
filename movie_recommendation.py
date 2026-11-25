@@ -112,7 +112,7 @@ def metadata(id):
 def headers(res):
     res.headers['X-Content-Type-Options']='nosniff'
     res.headers['Referrer-Policy']='strict-origin-when-cross-origin'
-    res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://image.tmdb.org https://*.mzstatic.com data:; frame-src https://www.youtube-nocookie.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    res.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://www.themoviedb.org https://image.tmdb.org https://*.mzstatic.com data:; frame-src https://www.youtube-nocookie.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     return res
 @app.get('/')
 def index():return send_from_directory(app.static_folder,'index.html')
